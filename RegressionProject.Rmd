@@ -1,0 +1,143 @@
+---
+title: "Regression Models Course Project"
+author: "Emilio González"
+output:
+  pdf_document:
+  html_document: default
+---
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+library(corrgram)
+library(Hmisc)
+library(corrgram)
+library(data.table)
+library(graphics)
+library(xtable)
+attach(mtcars)
+```
+
+## Executive Summary
+This work explores the relationship between a set of variables related to vehicles and miles per gallon (MPG) using a predefined dataset (mtcars). After an initial exploratory analysis a linear regression model including all the variables as regressors is performed. This model is refined in order to avoid problems of multicollinearity and interaction achieving a model with only three explanatory variables. Finally the work answers the question about which transmission is better in terms of MPG: manual cars seems to have a higher MPG.
+
+
+## Exploratory Analysis
+
+The data set only has `r nrow(mtcars)` cases. We can consider this as a small sample to extract very meaningful conclusions. Each row has `r  ncol(mtcars)` variables: the mpg (mileage per gallon) plus some other aspects of the automobile design and performance like number of cylinders, displacement in cu.in., horsepower, rear axle ratio, weight in lb/1000, 1/4 mile time in seconds, V or Straight engine, transmission, number of forward gears and numer of carburetors. The summary of these variables follows:
+
+```{r echo=FALSE, size=8, comment=NA}
+# summary(mtcars)
+y <- as.data.frame(sapply(mtcars, fivenum))
+y <- rbind(y, sapply(mtcars, sd))
+y[6,] <- round(y[6,],2)
+row.names(y) <- c("Min.", "1st Qu.", "Median", "3rd Qu.", "Max.", "Sd")
+y
+```
+We can appreciate the center and variability data measures: mpg has a great range, there are three values for cylinders (4, 6 and 8), a big disparity in the displacement, horsepower, weight and number of carburetors variables and finally the 1/4 mile time can be considered in a very narrow timeframe compared to the dispersion of the other variables. Out of the `r nrow(mtcars)` cases, only `r sum(mtcars$am)` are manual vehicles being the remaining `r sum(mtcars$am==0)` automatic.
+
+The **Figure 1** is a plot of **mpg** versus weight, cylinder, displacement and transmissions in four different boxplots. The continuous variables have been stratified in groups for uniformity reasons. The graphs clearly reveal how the light cars have the highers **mpg** and the negative correlation of cylinders and displacement with **mpg**. Finally when dealing with transmission it is clear that manual vehicles provide higher **mpg** than automatic ones (and the difference is shown)
+
+## Regression Models
+
+An initial study is the correlation of each variable with **mpg**, shown here in order of decreasing importance (whereas it is positive or negative). We can see that **wt**, **cyl**, **disp** and **hp** are the variables with a higher correlation with **mpg**.
+In the appendix in **Figure 2** the complete correlogram for all the variables is shown.
+```{r echo=FALSE, comment=NA}
+options(digits=2)
+corMPG <- as.data.frame(t(cor(mtcars["mpg"],mtcars)))
+corMPG$name <- rownames(corMPG)
+as.data.frame(t(t(as.data.frame(corMPG[order(-abs(corMPG[1])),2:1]))[2,]))
+options(digits=5)
+```
+An initial model will all the variables as regressors is not able to show what explanatory variables are **significantly** related to the response variable:
+```{r  comment=NA, echo=FALSE}
+fitall <- lm(mpg ~ ., data=mtcars)
+summary(fitall)$coeff
+```
+ 
+One approach to drop variables and look for an optimal set of explanatory variables is tune fining the model with step-wise selection using `step`. This updated regression model is much improved over the original. This new model accounts for interactions and collinearity including only three regressors.
+```{r echo=TRUE, comment=NA, echo=FALSE}
+fitstep <- step(fitall, direction="both", trace=0)
+summary(fitstep)$coeff
+```
+
+In **Figure 3** different plots diagnose the regression, including QQ Plot for normality test and a density plot of residuals (see the legend). Finally with an analysis of variance we can test for the difference between both models verifying we are not losing effectiveness.
+```{r comment=NA, echo=FALSE}
+anova(fitall, fitstep)
+```
+## Coefficient Interpretation
+The intercept gives the starting point. For each regressor (**holding the other ones constant**) the interpretation is the following: the **wt** coefficient tells us that **mpg** **decreases** by `r abs(fitstep$coeff["wt"])` miles/gallon as the weight increases in 1000lbs (negative correlation); the **qsec** coefficient tells us that **mpg** increases in `r fitstep$coeff["qsec"]` miles/gallon as 1/4 mile time increases by 1 second (slowest vehices have higher mpg) and finally the **am** coefficient tells us that manual cars enjoy `r fitstep$coeff["am"]` miles/gallon more than automatic ones.
+
+## Question of interest: Which transmission is better for MPG? Quantification
+The positive sign of the coefficient for **am** indicates a positive correlation (manual cars provide better mpg). Also looking in the appendix for **Figure 1**, the boxplot comparison for manual and automatic cars gives clear evidence of automatic ones suffering in terms of mpg. 
+On average, the difference is **`r mean(dplyr::filter(mtcars, am==1)$mpg)-mean(dplyr::filter(mtcars, am==0)$mpg)`** Miles/(US)gallon in favour of manual cars.
+Automatic and manual cars are clearly two leagues respect **mpg**. In any case it is important to notice that the number of cases in the data set is small and hence uncertainty is big. Also as show in  Cook's Distance plot of **Figure 3** some cases are influential observations having disproportional impact on the values of the model parameters.
+
+# Apendix. Figures
+
+```{r echo=FALSE, fig.width=8, fig.height=3 }
+par(mfrow=c(1,4),
+          oma = c(5,4,0,0) + 0.1,
+          mar = c(2,1,2,2) + 0.1)
+boxplot(mpg ~ cut(wt,3), data=mtcars, col='lightblue', main="MPG by Weight")
+boxplot(mpg ~ cyl, data=mtcars, col='lightblue', main="MPG by cylinder")
+boxplot(mpg ~ cut(disp,5), data=mtcars, col='lightblue', main="MPG by Displ. (cu.in.)")
+boxplot(mpg ~ factor(am, labels=c("automatic", "manual")), data=mtcars, col='lightblue', main="MPG by Transmission")
+par(mfrow=c(1,1))
+```
+
+**Figure 1**. Boxplot multiple for variables weight, cylinder, displacement and am versus mpg.
+
+```{r echo=FALSE, fig.width=5, fig.height=5}
+# Correlogram
+corrgram(mtcars, order=TRUE, lower.panel=panel.shade,
+  upper.panel=panel.conf, text.panel=panel.txt,
+  main="Correlogram (sorted)")
+```
+
+**Figure 2**. Correlogram of variables.
+On the lower-left part the correlation is shown easily in a visual way: intense darker colour shows high correlation (blue= positive, red=negative). On the upper-right part numeric correlations are shown
+
+
+```{r echo=FALSE, fig.width=8, fig.height=9}
+par(mfrow=c(3,2),
+          oma = c(5,4,0,0) + 0.1,
+          mar = c(2,1,2,2) + 0.1)
+plot(fitstep, 1:4)
+plot(density(resid(fitstep)), main="Density Plot of Residuals")
+par(mfrow=c(1,1))
+```
+
+**Figure 3** Regression Diagnostics and plot of residuals. The QQ Plot tells us we have violated the normality assumption (the points are not in the straight line). Linearity is also not met (Residuals vs Fitted). The Cook's distance shows us we have several influential observations that have great impact on the model. 
+
+
+```{r echo=FALSE, fig.width=8, fig.height=5}
+par(mfrow=c(1,2))
+plot(wt, mpg, main="Mpg by wt", xlab="Weight ", ylab="Miles Per Gallon ", col=am+1) 
+abline(lm(mpg~wt), col="green") 
+plot(qsec, mpg, main="Mpg by qsec", xlab="Time per 1/4 mile ", ylab="Miles Per Gallon ", col=am+1) 
+abline(lm(mpg~qsec), col="green") 
+par(mfrow=c(1,1))
+```
+
+**Figure 4** Indepent Scatterplot for the most important regressors with individual regression line but showing the difference between automatic (black) and manual (red) cars. It is easy to appreciate light cars are manual and with a better mpg while the heavier ones are principally automatic and provide less mpg. When looking at the 1/4 mile time vs mpg the most interesting finding is that when 2 vehicles have the same **qsec** always the manual one has a higher mpg (most of the manual cars are above the regression line). 
+
+******
+
+``` {r eval=FALSE}
+# LM model with all the variables as regressors
+fitall <- lm(mpg ~ ., data=mtcars)
+
+# Step-wise refined model
+fitstep <- step(fitall, direction="both", trace=0)
+
+# steps taken in the search for the most effective model as variables are removed
+# from the original model.
+fitstep$anova
+
+# Anova tset for comparison of both models
+anova(fitall, fitstep)
+
+# Computing the average in mpg between manual and automatic cars
+mean(dplyr::filter(mtcars, am==1)$mpg)-mean(dplyr::filter(mtcars, am==0)$mpg)
+```
+**Listing 1** R code for the key analysis performed
+
